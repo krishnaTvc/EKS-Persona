@@ -1,0 +1,7 @@
+region = "eu-north-1"
+cluster_name = "eks-persona-dev"
+cluster_version = "1.36"
+infra_role_arn = "arn:aws:iam::YOUR_ACCOUNT_ID:role/eks-persona-ci-infra"
+deploy_role_arn = "arn:aws:iam::YOUR_ACCOUNT_ID:role/eks-persona-ci-deploy"
+operator_principal_arn = "arn:aws:iam::YOUR_ACCOUNT_ID:role/YOUR_OPERATOR_ROLE"
+api_allowed_cidrs = ["YOUR_PUBLIC_IPV4/32"]

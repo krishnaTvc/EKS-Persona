@@ -1,0 +1,106 @@
+{{- range $name, $app := .Values.apps }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {app: {{ $name }}, project: eks-persona}
+spec:
+  replicas: {{ $app.replicas }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: {app: {{ $name }}}
+  template:
+    metadata:
+      labels: {app: {{ $name }}, project: eks-persona}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.registry }}/eks-persona/{{ $name }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports: [{name: http, containerPort: {{ $app.port }}}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: {{ $app.cpuRequest }}, memory: {{ $app.memoryRequest }}}
+            limits: {memory: {{ $app.memory }}}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: {{ if eq $name "frontend" }}/healthz{{ else }}/readyz{{ end }}
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 15
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 3
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          {{- if or (eq $name "registration") (eq $name "persona") }}
+            - {name: database-password, mountPath: /run/secrets, readOnly: true}
+          env:
+            - {name: DB_HOST, value: mysql}
+            - {name: DB_NAME, value: animal_persona}
+          {{- if eq $name "registration" }}
+            - {name: DB_USER, value: registration}
+            - {name: DB_PASSWORD_FILE, value: /run/secrets/registration_password}
+            - {name: PERSONA_URL, value: "http://persona:8000"}
+            - {name: MEDIA_URL, value: "http://media:8000"}
+          {{- else }}
+            - {name: DB_USER, value: persona_reader}
+            - {name: DB_PASSWORD_FILE, value: /run/secrets/persona_password}
+          {{- end }}
+          {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 32Mi}
+      {{- if or (eq $name "registration") (eq $name "persona") }}
+        - name: database-password
+          secret:
+            secretName: {{ $.Values.databaseSecret }}
+            defaultMode: 0444
+            items:
+            {{- if eq $name "registration" }}
+              - {key: registration_password, path: registration_password}
+            {{- else }}
+              - {key: persona_password, path: persona_password}
+            {{- end }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  {{- if eq $name "frontend" }}
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-attributes: load_balancing.cross_zone.enabled=true
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: HTTP
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /healthz
+  {{- end }}
+spec:
+  type: {{ if eq $name "frontend" }}LoadBalancer{{ else }}ClusterIP{{ end }}
+  {{- if eq $name "frontend" }}
+  loadBalancerClass: service.k8s.aws/nlb
+  allocateLoadBalancerNodePorts: false
+  {{- end }}
+  selector: {app: {{ $name }}}
+  ports:
+    - name: http
+      port: {{ if eq $name "frontend" }}80{{ else }}8000{{ end }}
+      targetPort: http
+{{- end }}

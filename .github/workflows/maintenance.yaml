@@ -1,0 +1,69 @@
+name: EKS Persona maintenance
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation to perform in AWS
+        required: true
+        type: choice
+        options: [status, persistence, backup, rollback]
+      helm_revision:
+        description: Existing numeric Helm revision for rollback only
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: eks-persona-dev
+  cancel-in-progress: false
+jobs:
+  maintain:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+      CLUSTER_NAME: eks-persona-dev
+      KUBECONFIG: ${{ runner.temp }}/eks-persona-maintenance-kubeconfig
+      TF_IN_AUTOMATION: "true"
+      AWS_EC2_METADATA_DISABLED: "true"
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_cluster_name: eks-persona-dev
+      TF_VAR_cluster_version: "1.36"
+      TF_VAR_infra_role_arn: ${{ vars.INFRA_ROLE_ARN }}
+      TF_VAR_deploy_role_arn: ${{ vars.DEPLOY_ROLE_ARN }}
+      TF_VAR_operator_principal_arn: ${{ vars.OPERATOR_PRINCIPAL_ARN }}
+      EXTRA_API_CIDRS: ${{ vars.EXTRA_API_CIDRS }}
+      OPERATION: ${{ inputs.operation }}
+      HELM_REVISION: ${{ inputs.helm_revision }}
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: "1.15.8", terraform_wrapper: false}
+      - run: bash scripts/cloud/install-tools.sh
+      - run: bash scripts/cloud/authorize-runner.sh
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.INFRA_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          unset-current-credentials: true
+      - name: Confirm cluster exists and update the runner allowlist through Terraform
+        run: |
+          aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null
+          bash scripts/cloud/infra.sh
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          unset-current-credentials: true
+      - run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+      - run: bash scripts/cloud/maintenance.sh
+      - if: failure()
+        run: bash scripts/cloud/diagnostics.sh
+      - if: always()
+        run: rm -f "$KUBECONFIG"

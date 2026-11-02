@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#164c40">
+  <title>Wildly You · Find your animal persona</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar wrap">
+    <a class="brand" href="/" aria-label="Wildly You home"><span class="brand-mark">w.</span> wildly you</a>
+    <span class="lab-label"><span class="dot"></span> The cloud edition</span>
+  </header>
+  <main class="wrap">
+    <section class="intro">
+      <p class="eyebrow">A LITTLE CURIOUS. A LITTLE WILD.</p>
+      <h1>Your spirit animal.<br><span>With a sense of humour.</span></h1>
+      <p class="intro-copy">A clever fox? A professional nap manager? Meet the animal that matches your vibe. No deep science. Just a little fun.</p>
+    </section>
+    <div class="experience">
+      <section class="form-panel" aria-labelledby="form-title">
+        <span class="step-label">01 / SAY HELLO</span>
+        <h2 id="form-title">First, a little about you.</h2>
+        <p class="muted">Two details. One delightfully wild introduction.</p>
+        <form id="registration-form">
+          <label for="name">What should we call you?</label>
+          <input id="name" name="name" type="text" maxlength="80" placeholder="Your first name" autocomplete="given-name" required>
+          <label for="age">And your age?</label>
+          <input id="age" name="age" type="number" min="1" max="120" step="1" placeholder="e.g. 30" inputmode="numeric" required>
+          <button id="submit-button" class="primary" type="submit">Meet my animal <span aria-hidden="true">↗</span></button>
+        </form>
+        <p id="status" role="status" aria-live="polite"></p>
+        <p class="fine-print">A random, playful match—not a personality assessment. Your name, age and match are saved in this demo app.</p>
+      </section>
+      <section class="result-panel" aria-labelledby="result-title" aria-live="polite">
+        <div id="empty-result">
+          <span class="step-label">02 / MEET YOUR WILD SIDE</span>
+          <div class="preview-stack" aria-hidden="true">
+            <img class="preview-side left" src="/media/fox.svg" alt="">
+            <img class="preview-main" src="/media/panda.svg" alt="">
+            <img class="preview-side right" src="/media/owl.svg" alt="">
+          </div>
+          <h2 id="result-title">Someone wild is waiting.</h2>
+          <p class="muted">Your new alter ego is just one click away.</p>
+          <span class="small-tag">8 animals. Endless personality.</span>
+        </div>
+        <div id="filled-result" hidden>
+          <span class="step-label">02 / YOUR WILD SIDE, REVEALED</span>
+          <img id="animal-image" class="animal-image" alt="">
+          <p class="match-label" id="match-label"></p>
+          <h2 id="animal-name"></h2>
+          <p class="animal-description" id="animal-description"></p>
+          <div class="result-meta"><span id="saved-details"></span><span class="saved-badge">✓ Saved in MySQL</span></div>
+          <button id="new-person" class="text-button" type="button">Try another person →</button>
+        </div>
+      </section>
+    </div>
+    <section class="meet-cast" aria-labelledby="cast-title">
+      <div class="cast-heading"><div><p class="eyebrow">THE POSSIBLE SUSPECTS</p><h2 id="cast-title">Good company. Questionable habits.</h2></div><span class="muted">Meet the whole crew</span></div>
+      <div class="cast-grid" id="cast-grid"></div>
+    </section>
+  </main>
+  <footer class="wrap"><span>Made for curious humans.</span><span>Four app services · One persistent MySQL database</span></footer>
+</body>
+</html>

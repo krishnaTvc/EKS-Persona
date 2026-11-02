@@ -1,0 +1,17 @@
+.env
+.secrets/
+backups/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan
+*.tfout
+crash.log
+*.kubeconfig
+docs/*.pdf

@@ -1,0 +1,24 @@
+name: OIDC identity info
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  show-safe-claims:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show identity metadata only never the JWT
+        shell: python
+        run: |
+          import base64,json,os
+          from urllib.request import Request,urlopen
+          url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience=sts.amazonaws.com'
+          request=Request(url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+          with urlopen(request,timeout=20) as response:
+              token=json.load(response)['value']
+          payload=token.split('.')[1]
+          claims=json.loads(base64.urlsafe_b64decode(payload+'='*(-len(payload)%4)))
+          keys=['repository','repository_owner_id','repository_id','ref','aud','sub']
+          print(json.dumps({key:claims.get(key) for key in keys},indent=2))

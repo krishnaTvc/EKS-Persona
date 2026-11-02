@@ -1,0 +1,2 @@
+-r ../services/registration/requirements.txt
+PyYAML==6.0.3

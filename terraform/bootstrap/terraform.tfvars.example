@@ -1,0 +1,8 @@
+region = "eu-north-1"
+github_owner = "krishnaTvc"
+github_owner_id = "99535254"
+github_repository_id = ""
+repository = "EKS-Persona"
+state_bucket = "eks-persona-state-YOUR_ACCOUNT_ID-eu-north-1"
+# Set false if this account already has GitHub's OIDC provider.
+create_github_oidc = true

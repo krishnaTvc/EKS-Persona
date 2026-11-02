@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-headless
+spec:
+  clusterIP: None
+  selector: {app: mysql}
+  ports: [{name: mysql, port: 3306, targetPort: mysql}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  type: ClusterIP
+  selector: {app: mysql}
+  ports: [{name: mysql, port: 3306, targetPort: mysql}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+spec:
+  serviceName: mysql-headless
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels: {app: mysql}
+  template:
+    metadata:
+      labels: {app: mysql, project: eks-persona}
+    spec:
+      terminationGracePeriodSeconds: 60
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.mysql.uid }}
+        runAsGroup: {{ .Values.mysql.gid }}
+        fsGroup: {{ .Values.mysql.gid }}
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: mysql
+          image: {{ .Values.mysql.image }}
+          ports: [{name: mysql, containerPort: 3306}]
+          args: ["--datadir=/var/lib/mysql/data", "--socket=/var/run/mysqld/mysqld.sock", "--pid-file=/var/run/mysqld/mysqld.pid", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--innodb-buffer-pool-size=128M", "--max-connections=50"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          env:
+            - {name: MYSQL_DATABASE, value: animal_persona}
+            - {name: MYSQL_ROOT_PASSWORD_FILE, value: /run/secrets/mysql_root_password}
+            - {name: MYSQL_UNIX_PORT, value: /var/run/mysqld/mysqld.sock}
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {memory: 1Gi}
+          startupProbe:
+            exec:
+              command: [sh, -c, 'MYSQL_PWD="$(cat /run/secrets/mysql_root_password)" mysql --protocol=socket -uroot -Nse "SELECT 1"']
+            periodSeconds: 5
+            failureThreshold: 60
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'MYSQL_PWD="$(cat /run/secrets/mysql_root_password)" mysql --protocol=socket -uroot animal_persona -Nse "SELECT COUNT(*) FROM persona"']
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: [sh, -c, 'MYSQL_PWD="$(cat /run/secrets/mysql_root_password)" mysql --protocol=socket -uroot -Nse "SELECT 1"']
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/mysql}
+            - {name: socket, mountPath: /var/run/mysqld}
+            - {name: tmp, mountPath: /tmp}
+            - {name: passwords, mountPath: /run/secrets, readOnly: true}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+      volumes:
+        - {name: socket, emptyDir: {sizeLimit: 16Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 32Mi}}
+        - name: passwords
+          secret:
+            secretName: {{ .Values.databaseSecret }}
+            defaultMode: 0444
+        - name: init
+          configMap:
+            name: persona-db-init
+            defaultMode: 0444
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOncePod]
+        storageClassName: {{ .Values.mysql.storageClass }}
+        resources:
+          requests: {storage: {{ .Values.mysql.storage }}}

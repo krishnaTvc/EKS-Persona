@@ -1,0 +1,111 @@
+name: Deploy EKS Persona
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: eks-persona-dev
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v6
+        with: {python-version: "3.12"}
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: "1.15.8", terraform_wrapper: false}
+      - run: bash scripts/cloud/install-tools.sh
+      - name: Validate Terraform and render Helm before AWS changes
+        run: |
+          terraform -chdir=terraform/infra init -backend=false -lockfile=readonly
+          terraform -chdir=terraform/infra validate
+          helm lint charts/persona
+          helm template persona charts/persona --namespace persona > "$RUNNER_TEMP/persona-rendered.yaml"
+      - run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r tests/requirements.txt
+          .venv/bin/python -m unittest discover -s tests -v
+          node --check services/frontend/static/app.js
+          for file in scripts/cloud/*.sh database/init/*.sh; do bash -n "$file"; done
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+      CLUSTER_NAME: eks-persona-dev
+      KUBECONFIG: ${{ runner.temp }}/eks-persona-kubeconfig
+      DOCKER_CONFIG: ${{ runner.temp }}/eks-persona-docker
+      AWS_EC2_METADATA_DISABLED: "true"
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_cluster_name: eks-persona-dev
+      TF_VAR_cluster_version: "1.36"
+      TF_VAR_infra_role_arn: ${{ vars.INFRA_ROLE_ARN }}
+      TF_VAR_deploy_role_arn: ${{ vars.DEPLOY_ROLE_ARN }}
+      TF_VAR_operator_principal_arn: ${{ vars.OPERATOR_PRINCIPAL_ARN }}
+      EXTRA_API_CIDRS: ${{ vars.EXTRA_API_CIDRS }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+          terraform_wrapper: false
+      - name: Install verified Helm and kubectl binaries
+        run: bash scripts/cloud/install-tools.sh
+      - name: Check runner tools
+        run: bash scripts/cloud/check-tools.sh
+      - name: Authorize this hosted runner IP
+        run: bash scripts/cloud/authorize-runner.sh
+      - name: Assume infrastructure role using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.INFRA_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: PersonaInfra-${{ github.run_id }}
+          role-duration-seconds: 7200
+          unset-current-credentials: true
+      - name: Terraform plan and apply
+        run: bash scripts/cloud/infra.sh
+      - name: Prepare namespace storage and load balancer controller
+        run: bash scripts/cloud/platform.sh
+      - name: Resolve registry
+        run: |
+          registry="$(terraform -chdir=terraform/infra output -raw ecr_registry)"
+          echo "IMAGE_REGISTRY=$registry" >> "$GITHUB_ENV"
+      - name: Build push and scan four images
+        run: bash scripts/cloud/build-images.sh
+      - name: Assume namespace deployment role using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: PersonaDeploy-${{ github.run_id }}
+          unset-current-credentials: true
+      - name: Deploy the application using Helm
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          REGISTRATION_PASSWORD: ${{ secrets.REGISTRATION_PASSWORD }}
+          PERSONA_PASSWORD: ${{ secrets.PERSONA_PASSWORD }}
+        run: bash scripts/cloud/deploy.sh
+      - name: Test public application URL
+        run: bash scripts/cloud/smoke.sh
+      - name: Diagnose failure
+        if: failure()
+        run: bash scripts/cloud/diagnostics.sh
+      - name: Clean runner files
+        if: always()
+        run: |
+          rm -f "$KUBECONFIG"
+          rm -rf "$DOCKER_CONFIG"

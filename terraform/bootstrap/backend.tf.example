@@ -1,0 +1,4 @@
+# Copy to backend.tf AFTER creating the bucket, then run terraform init -migrate-state.
+terraform {
+  backend "s3" {}
+}

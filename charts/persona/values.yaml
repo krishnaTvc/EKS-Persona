@@ -1,0 +1,38 @@
+image:
+  registry: "111122223333.dkr.ecr.eu-north-1.amazonaws.com"
+  tag: "replace-with-commit-sha"
+  pullPolicy: IfNotPresent
+databaseSecret: persona-db
+apps:
+  frontend:
+    port: 8080
+    replicas: 1
+    memory: 128Mi
+    cpuRequest: 50m
+    memoryRequest: 32Mi
+  registration:
+    port: 8000
+    replicas: 1
+    memory: 256Mi
+    cpuRequest: 100m
+    memoryRequest: 128Mi
+  persona:
+    port: 8000
+    replicas: 1
+    memory: 256Mi
+    cpuRequest: 100m
+    memoryRequest: 128Mi
+  media:
+    port: 8000
+    replicas: 1
+    memory: 256Mi
+    cpuRequest: 50m
+    memoryRequest: 64Mi
+mysql:
+  image: mysql:8.4
+  storageClass: eks-persona-gp3
+  storage: 5Gi
+  uid: 999
+  gid: 999
+networkPolicy:
+  enabled: true

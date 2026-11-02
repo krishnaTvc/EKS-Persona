@@ -1,0 +1,67 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-from-load-balancer
+spec:
+  podSelector:
+    matchLabels: {app: frontend}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock: {cidr: 0.0.0.0/0}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+{{- range $rule := list (dict "source" "frontend" "target" "registration" "port" 8000) (dict "source" "frontend" "target" "media" "port" 8000) (dict "source" "registration" "target" "persona" "port" 8000) (dict "source" "registration" "target" "media" "port" 8000) (dict "source" "registration" "target" "mysql" "port" 3306) (dict "source" "persona" "target" "mysql" "port" 3306) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $rule.source }}-to-{{ $rule.target }}-egress
+spec:
+  podSelector:
+    matchLabels: {app: {{ $rule.source }}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app: {{ $rule.target }}}
+      ports: [{protocol: TCP, port: {{ $rule.port }}}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $rule.source }}-to-{{ $rule.target }}-ingress
+spec:
+  podSelector:
+    matchLabels: {app: {{ $rule.target }}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: {{ $rule.source }}}
+      ports: [{protocol: TCP, port: {{ $rule.port }}}]
+{{- end }}
+{{- end }}
