@@ -5,4 +5,4 @@ github_repository_id = "1442579065"
 repository = "EKS-Persona"
 state_bucket = "eks-persona-state-407178840502-eu-north-1"
 # Set false if this account already has GitHub's OIDC provider.
-create_github_oidc = true
+create_github_oidc = false
