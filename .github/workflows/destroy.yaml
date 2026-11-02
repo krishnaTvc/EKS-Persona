@@ -1,0 +1,116 @@
+name: Destroy EKS Persona
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview the Terraform destroy plan or perform the teardown
+        required: true
+        default: plan-only
+        type: choice
+        options: [plan-only, destroy]
+      confirm_cluster:
+        description: For destroy mode type eks-persona-dev exactly
+        required: false
+        type: string
+      backup_database:
+        description: Back up existing MySQL before teardown
+        required: true
+        default: true
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: eks-persona-dev
+  cancel-in-progress: false
+jobs:
+  destroy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+      CLUSTER_NAME: eks-persona-dev
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_WORKSPACE: default
+      AWS_EC2_METADATA_DISABLED: "true"
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_cluster_name: eks-persona-dev
+      TF_VAR_cluster_version: "1.36"
+      TF_VAR_infra_role_arn: ${{ vars.INFRA_ROLE_ARN }}
+      TF_VAR_deploy_role_arn: ${{ vars.DEPLOY_ROLE_ARN }}
+      TF_VAR_operator_principal_arn: ${{ vars.OPERATOR_PRINCIPAL_ARN }}
+      EXTRA_API_CIDRS: ${{ vars.EXTRA_API_CIDRS }}
+      DESTROY_MODE: ${{ inputs.mode }}
+      CONFIRM_CLUSTER: ${{ inputs.confirm_cluster }}
+      BACKUP_DATABASE: ${{ inputs.backup_database }}
+    steps:
+      - name: Validate manual confirmation and prepare runtime paths
+        shell: bash
+        run: |
+          case "$DESTROY_MODE" in
+            plan-only) ;;
+            destroy) [[ "$CONFIRM_CLUSTER" == "$CLUSTER_NAME" ]] || { echo 'Type eks-persona-dev to authorize teardown'; exit 1; } ;;
+            *) echo 'Unknown destroy mode'; exit 1 ;;
+          esac
+          echo "KUBECONFIG=$RUNNER_TEMP/eks-persona-destroy-kubeconfig" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: "1.15.8", terraform_wrapper: false}
+      - run: bash scripts/cloud/install-tools.sh
+      - run: bash scripts/cloud/authorize-runner.sh
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.INFRA_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: PersonaDestroy-${{ github.run_id }}
+          role-duration-seconds: 7200
+          unset-current-credentials: true
+      - name: Check the existing infra state without creating resources
+        id: prepare
+        run: python3 scripts/cloud/destroy.py prepare
+      - name: Preview only
+        if: steps.prepare.outputs.has_state == 'true' && inputs.mode == 'plan-only'
+        run: python3 scripts/cloud/destroy.py plan
+      - name: Allow this runner and record retained database storage
+        if: steps.prepare.outputs.has_state == 'true' && steps.prepare.outputs.cluster_exists == 'true' && inputs.mode == 'destroy'
+        run: python3 scripts/cloud/destroy.py connect
+      - name: Assume application role for backup and app cleanup
+        if: steps.prepare.outputs.has_state == 'true' && steps.prepare.outputs.cluster_exists == 'true' && inputs.mode == 'destroy'
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          unset-current-credentials: true
+      - name: Save storage inventory and optional MySQL backup
+        if: steps.prepare.outputs.has_state == 'true' && steps.prepare.outputs.cluster_exists == 'true' && inputs.mode == 'destroy'
+        run: python3 scripts/cloud/destroy.py backup
+      - name: Remove the app and wait for the load balancer Service to disappear
+        if: steps.prepare.outputs.has_state == 'true' && steps.prepare.outputs.cluster_exists == 'true' && inputs.mode == 'destroy'
+        run: python3 scripts/cloud/destroy.py uninstall-app
+      - name: Restore infrastructure role
+        if: steps.prepare.outputs.has_state == 'true' && inputs.mode == 'destroy'
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.INFRA_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: PersonaDestroyApply-${{ github.run_id }}
+          role-duration-seconds: 7200
+          unset-current-credentials: true
+      - name: Remove the controller after app load balancer cleanup
+        if: steps.prepare.outputs.has_state == 'true' && steps.prepare.outputs.cluster_exists == 'true' && inputs.mode == 'destroy'
+        run: python3 scripts/cloud/destroy.py uninstall-controller
+      - name: Apply a verified destroy-only plan for terraform infra
+        if: steps.prepare.outputs.has_state == 'true' && inputs.mode == 'destroy'
+        run: python3 scripts/cloud/destroy.py destroy
+      - name: Clean temporary credentials paths and saved plans
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${KUBECONFIG:-}" "$RUNNER_TEMP/eks-persona-destroy.tfplan"
+          rm -rf "$RUNNER_TEMP/eks-persona-destroy"
