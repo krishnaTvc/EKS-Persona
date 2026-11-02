@@ -43,8 +43,6 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ vars.STATE_BUCKET }}
       CLUSTER_NAME: eks-persona-dev
-      KUBECONFIG: ${{ runner.temp }}/eks-persona-kubeconfig
-      DOCKER_CONFIG: ${{ runner.temp }}/eks-persona-docker
       AWS_EC2_METADATA_DISABLED: "true"
       TF_IN_AUTOMATION: "true"
       TF_VAR_region: ${{ vars.AWS_REGION }}
@@ -56,6 +54,12 @@ jobs:
       EXTRA_API_CIDRS: ${{ vars.EXTRA_API_CIDRS }}
       IMAGE_TAG: ${{ github.sha }}
     steps:
+      - name: Prepare runtime paths
+        shell: bash
+        run: |
+          echo "KUBECONFIG=$RUNNER_TEMP/eks-persona-kubeconfig" >> "$GITHUB_ENV"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/eks-persona-docker" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/eks-persona-docker"
       - uses: actions/checkout@v6
         with: {persist-credentials: false}
       - uses: hashicorp/setup-terraform@v3
