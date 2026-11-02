@@ -21,7 +21,7 @@ jobs:
       - run: bash scripts/cloud/install-tools.sh
       - name: Validate Terraform and render Helm before AWS changes
         run: |
-          terraform -chdir=terraform/infra init -backend=false -lockfile=readonly
+          terraform -chdir=terraform/infra init -backend=false
           terraform -chdir=terraform/infra validate
           helm lint charts/persona
           helm template persona charts/persona --namespace persona > "$RUNNER_TEMP/persona-rendered.yaml"
