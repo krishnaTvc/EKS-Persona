@@ -28,7 +28,6 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ vars.STATE_BUCKET }}
       CLUSTER_NAME: eks-persona-dev
-      KUBECONFIG: ${{ runner.temp }}/eks-persona-maintenance-kubeconfig
       TF_IN_AUTOMATION: "true"
       AWS_EC2_METADATA_DISABLED: "true"
       TF_VAR_region: ${{ vars.AWS_REGION }}
@@ -41,6 +40,10 @@ jobs:
       OPERATION: ${{ inputs.operation }}
       HELM_REVISION: ${{ inputs.helm_revision }}
     steps:
+      - name: Prepare runtime paths
+        shell: bash
+        run: |
+          echo "KUBECONFIG=$RUNNER_TEMP/eks-persona-maintenance-kubeconfig" >> "$GITHUB_ENV"
       - uses: actions/checkout@v6
         with: {persist-credentials: false}
       - uses: hashicorp/setup-terraform@v3
