@@ -20,6 +20,23 @@ for service in frontend registration persona media; do
     [[ "$uid" != 0 ]] || { echo "Refusing to push a root runtime image: $service" >&2; exit 1; }
     docker push "$image"
   fi
+    scan_error="$(mktemp)"
+
+  if aws ecr start-image-scan \
+    --region "$AWS_REGION" \
+    --repository-name "$repo" \
+    --image-id "imageTag=$IMAGE_TAG" \
+    >/dev/null 2>"$scan_error"; then
+    echo "Scan requested for $repo:$IMAGE_TAG"
+  elif grep -q 'LimitExceededException' "$scan_error"; then
+    echo "Scan limit reached; checking for an existing completed scan."
+  else
+    cat "$scan_error" >&2
+    rm -f "$scan_error"
+    exit 1
+  fi
+
+  rm -f "$scan_error"
   aws ecr wait image-scan-complete --repository-name "$repo" --image-id "imageTag=$IMAGE_TAG"
   findings="$(aws ecr describe-image-scan-findings --repository-name "$repo" --image-id "imageTag=$IMAGE_TAG" --query imageScanFindings.findingSeverityCounts --output json)"
   printf '%s scan counts: %s\n' "$service" "$findings"
