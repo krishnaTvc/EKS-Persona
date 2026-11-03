@@ -48,7 +48,7 @@ variable "api_allowed_cidrs" {
   type = list(string)
   validation {
 
-    condition = length(var.api_allowed_cidrs) > 0 && alltrue([for cidr in var.api_allowed_cidrs : can(cidrnetmask(cidr)) && cidr != "0.0.0.0/0"])
+    condition = length(var.api_allowed_cidrs) > 0 && alltrue([for cidr in var.api_allowed_cidrs : can(cidrnetmask(cidr)) && cidr != "223.185.44.128"])
     error_message = "Provide the runner/operator public IPv4 CIDRs; do not use 0.0.0.0/0."
 
   }
