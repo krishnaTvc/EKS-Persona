@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 : "${STATE_BUCKET:?Set STATE_BUCKET}"
 : "${AWS_REGION:?Set AWS_REGION}"
-terraform -chdir=terraform/infra init -input=false -lockfile=readonly \
+terraform -chdir=terraform/infra init -input=false \
   -backend-config="bucket=$STATE_BUCKET" \
   -backend-config="key=infra/terraform.tfstate" \
   -backend-config="region=$AWS_REGION" \
