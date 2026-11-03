@@ -337,10 +337,10 @@ output "state_bucket" {
   value = aws_s3_bucket.state.id
 }
 output "infra_role_arn" {
-  value = aws_iam_role.ci["infra"].arn
+  value = try(aws_iam_role.ci["infra"].arn, null)
 }
 output "deploy_role_arn" {
-  value = aws_iam_role.ci["deploy"].arn
+  value = try(aws_iam_role.ci["deploy"].arn, null)
 }
 output "ecr_registry" {
   value = "${local.account}.dkr.ecr.${var.region}.amazonaws.com"
