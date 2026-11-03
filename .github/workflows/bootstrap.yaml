@@ -1,0 +1,52 @@
+name: Bootstrap EKS Persona
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'First run without a bucket: apply. Existing bucket: plan or apply.'
+        required: true
+        type: choice
+        default: plan
+        options: [plan, apply]
+permissions:
+  contents: read
+concurrency:
+  group: eks-persona-dev
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_state_bucket: ${{ vars.STATE_BUCKET }}
+      TF_VAR_github_owner: ${{ github.repository_owner }}
+      TF_VAR_github_owner_id: ${{ github.repository_owner_id }}
+      TF_VAR_github_repository_id: ${{ github.repository_id }}
+      TF_VAR_repository: EKS-Persona
+      TF_VAR_create_github_oidc: "false"
+      OPERATION: ${{ inputs.operation }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+          terraform_wrapper: false
+      - name: Authenticate using the dedicated bootstrap role
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.BOOTSTRAP_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: 3600
+          unset-current-credentials: true
+      - name: Import existing resources and bootstrap Terraform
+        run: python3 scripts/cloud/bootstrap.py

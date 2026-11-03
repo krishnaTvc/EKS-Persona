@@ -1,0 +1,78 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ExistingOidcRead",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetOpenIDConnectProvider"
+      ],
+      "Resource": "arn:aws:iam::407178840502:oidc-provider/token.actions.githubusercontent.com"
+    },
+    {
+      "Sid": "ManageTwoCiRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRolePolicies",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::407178840502:role/eks-persona-ci-infra",
+        "arn:aws:iam::407178840502:role/eks-persona-ci-deploy"
+      ]
+    },
+    {
+      "Sid": "BootstrapBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:ListBucket",
+        "s3:GetBucket*",
+        "s3:PutBucket*",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutEncryptionConfiguration"
+      ],
+      "Resource": "arn:aws:s3:::eks-persona-state-407178840502-eu-north-1"
+    },
+    {
+      "Sid": "BootstrapStateOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::eks-persona-state-407178840502-eu-north-1/bootstrap/*"
+    },
+    {
+      "Sid": "FourRepositories",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DescribeRepositories",
+        "ecr:ListTagsForResource",
+        "ecr:TagResource",
+        "ecr:UntagResource",
+        "ecr:PutImageScanningConfiguration",
+        "ecr:PutImageTagMutability"
+      ],
+      "Resource": [
+        "arn:aws:ecr:eu-north-1:407178840502:repository/eks-persona/frontend",
+        "arn:aws:ecr:eu-north-1:407178840502:repository/eks-persona/registration",
+        "arn:aws:ecr:eu-north-1:407178840502:repository/eks-persona/persona",
+        "arn:aws:ecr:eu-north-1:407178840502:repository/eks-persona/media"
+      ]
+    }
+  ]
+}
