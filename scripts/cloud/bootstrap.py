@@ -118,7 +118,7 @@ def main():
     backend_args = [f'-backend-config=bucket={bucket}', f'-backend-config=key={KEY}',
                     f'-backend-config=region={region}', '-backend-config=use_lockfile=true',
                     '-backend-config=encrypt=true',
-                    f'-backend-config=expected_bucket_owner={ACCOUNT}']
+                    f'-backend-config=allowed_account_ids=["{ACCOUNT}"]']
     if not bucket_exists:
         # Exceptional first run: Terraform creates only S3 resources using local state.
         # Migrate that state immediately, before importing IAM roles or creating ECR.
